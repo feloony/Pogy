@@ -26,9 +26,12 @@ module.exports = class Util {
   }
 
   get directory() {
-    // Resolve paths from this project file, not require.main, so scripts
-    // launched from subdirectories still find the root src/ folders.
-    return `${path.resolve(__dirname, "../..")}${path.sep}`;
+    // Prefer the current working directory when it is the repository root.
+    // Fall back to this file's location so nested scripts work from any cwd.
+    const cwd = process.cwd();
+    const cwdHasSource = require("fs").existsSync(path.join(cwd, "src", "commands"));
+    const root = cwdHasSource ? cwd : path.resolve(__dirname, "../..");
+    return `${root}${path.sep}`;
   }
 
   removeDuplicates(arr) {
@@ -56,41 +59,84 @@ module.exports = class Util {
   }
 
   async loadCommands() {
-    for await (const commandFile of this.loadFiles(
-      `${this.directory}src/commands`
-    )) {
-      delete require.cache[commandFile];
-      const { name } = path.parse(commandFile);
-      const File = require(commandFile);
-      if (!this.isClass(File))
-        throw new TypeError(`Command ${name} doesn't export a class.`);
-      const command = new File(this.client, name.toLowerCase());
-      if (!(command instanceof Command))
-        throw new TypeError(`Comamnd ${name} doesnt belong in Commands.`);
-      this.client.botCommands.set(command.name, command);
+    const commandDir = path.join(this.directory, "src", "commands");
+    const errors = [];
+    let files;
 
-      if (command.aliases.length) {
+    try {
+      files = [];
+      for await (const file of this.loadFiles(commandDir)) files.push(file);
+    } catch (error) {
+      throw new Error(`Unable to read command directory "${commandDir}": ${error.message}`);
+    }
+
+    for (const commandFile of files) {
+      const name = path.parse(commandFile).name;
+      try {
+        delete require.cache[commandFile];
+        const File = require(commandFile);
+        if (!this.isClass(File)) {
+          throw new TypeError(`Command ${name} doesn't export a class.`);
+        }
+        const command = new File(this.client, name.toLowerCase());
+        if (!(command instanceof Command)) {
+          throw new TypeError(`Command ${name} does not extend the Command base class.`);
+        }
+        if (!Array.isArray(command.aliases)) {
+          throw new TypeError(`Command ${name} must define aliases as an array.`);
+        }
+        this.client.botCommands.set(command.name, command);
         for (const alias of command.aliases) {
           this.client.aliases.set(alias, command.name);
         }
+      } catch (error) {
+        errors.push(`${path.relative(this.directory, commandFile)}: ${error.stack || error.message}`);
       }
     }
+
+    if (errors.length) {
+      throw new Error(`Failed to load ${errors.length} command file(s):\n- ${errors.join("\n- ")}`);
+    }
+    console.log(`[Pogy] Loaded ${this.client.botCommands.size} commands.`);
   }
 
   async loadEvents() {
-    for await (const eventFile of this.loadFiles(
-      `${this.directory}src/events`
-    )) {
-      delete require.cache[eventFile];
-      const { name } = path.parse(eventFile);
-      const File = require(eventFile);
-      if (!this.isClass(File))
-        throw new TypeError(`Event ${name} doesn't export a class!`);
-      const event = new File(this.client, name);
-      if (!(event instanceof Event))
-        throw new TypeError(`Event ${name} doesn't belong in Events`);
-      this.client.botEvents.set(event.name, event);
-      event.emitter[event.type](name, (...args) => event.run(...args));
+    const eventDir = path.join(this.directory, "src", "events");
+    const errors = [];
+    let files;
+
+    try {
+      files = [];
+      for await (const file of this.loadFiles(eventDir)) files.push(file);
+    } catch (error) {
+      throw new Error(`Unable to read event directory "${eventDir}": ${error.message}`);
     }
+
+    for (const eventFile of files) {
+      const name = path.parse(eventFile).name;
+      try {
+        delete require.cache[eventFile];
+        const File = require(eventFile);
+        if (!this.isClass(File)) {
+          throw new TypeError(`Event ${name} doesn't export a class.`);
+        }
+        const event = new File(this.client, name);
+        if (!(event instanceof Event)) {
+          throw new TypeError(`Event ${name} doesn't extend the Event base class.`);
+        }
+        if (!event.emitter || typeof event.emitter[event.type] !== "function") {
+          throw new TypeError(`Event ${name} has an invalid emitter/type configuration.`);
+        }
+        this.client.botEvents.set(event.name, event);
+        event.emitter[event.type](name, (...args) => event.run(...args));
+      } catch (error) {
+        errors.push(`${path.relative(this.directory, eventFile)}: ${error.stack || error.message}`);
+      }
+    }
+
+    if (errors.length) {
+      throw new Error(`Failed to load ${errors.length} event file(s):\n- ${errors.join("\n- ")}`);
+    }
+    console.log(`[Pogy] Loaded ${this.client.botEvents.size} events.`);
   }
 };
