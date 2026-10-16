@@ -32,8 +32,8 @@ module.exports = class extends Event {
       if (results && results.length) {
         for (const result of results) {
           if (
-            Number(result.premium.redeemedAt) >=
-            Number(result.premium.expiresAt)
+            Number(result.premium.expiresAt) > 0 &&
+            Date.now() >= Number(result.premium.expiresAt)
           ) {
             const guildPremium = this.client.guilds.cache.get(result.guildId);
             if (guildPremium) {

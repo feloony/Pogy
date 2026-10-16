@@ -17,8 +17,9 @@ module.exports = class PogyClient extends Client {
         "GUILD_PRESENCES",
       ],
       allowedMentions: {
-        parse: ["roles", "users", "everyone"],
-        repliedUser: true,
+        // Avoid accidental mass mentions from command output or user-provided content.
+        parse: ["users"],
+        repliedUser: false,
       },
       presence: {
         status: "online",
@@ -35,28 +36,32 @@ module.exports = class PogyClient extends Client {
     this.botCommands = new Collection();
     this.botEvents = new Collection();
     this.aliases = new Collection();
-    this.utils = require("./src/utils/utils.js");
     this.mongoose = require("./src/utils/mongoose");
     this.utils = new Util(this);
-    this.config = require("./config.json");
+    this.config = config;
   }
 
   validate(options) {
-    if (typeof options !== "object")
-      throw new TypeError("Options should be a type of Object.");
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+      throw new TypeError("Options should be an object.");
+    }
 
-    if (!options.prefix)
-      throw new Error("You must pass a prefix for the client.");
-    if (typeof options.prefix !== "string")
-      throw new TypeError("Prefix should be a type of String.");
+    if (typeof options.prefix !== "string" || !options.prefix.trim()) {
+      throw new TypeError("A non-empty string prefix must be provided in config.json.");
+    }
     this.prefix = options.prefix;
   }
 
   async start(token) {
+    if (typeof token !== "string" || !token.trim()) {
+      throw new Error("Missing Discord bot token. Set TOKEN in your environment.");
+    }
+
     require("./src/utils/prototypes");
     await this.utils.loadCommands();
     await this.utils.loadEvents();
     await this.mongoose.init();
-    this.login(token);
+    await this.login(token);
+    return this;
   }
 };

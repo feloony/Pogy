@@ -93,18 +93,15 @@ module.exports = class extends Event {
         ? message.content.match(mentionRegexPrefix)[0]
         : mainPrefix;
 
-      const userBlacklistSettings = await Blacklist.findOne({
-        discordId: message.author.id,
-      });
-      const guildBlacklistSettings = await Blacklist.findOne({
-        guildId: message.guild.id,
-      });
-
-      const maintenance = await Maintenance.findOne({
-        maintenance: "maintenance",
-      });
-
+      // Most messages are not commands. Avoid three extra database reads for them.
       if (!message.content.startsWith(prefix)) return;
+
+      const [userBlacklistSettings, guildBlacklistSettings, maintenance] =
+        await Promise.all([
+          Blacklist.findOne({ discordId: message.author.id }),
+          Blacklist.findOne({ guildId: message.guild.id }),
+          Maintenance.findOne({ maintenance: "maintenance" }),
+        ]);
 
       // eslint-disable-next-line no-unused-vars
       const [cmd, ...args] = message.content
