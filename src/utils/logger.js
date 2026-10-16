@@ -21,11 +21,14 @@ if (typeof webhookUrl === "string" && /^https:\/\/discord(?:app)?\.com\/api\/web
   }
 }
 
-const myFormat = printf(({ level, message, label, timestamp }) => {
+const myFormat = printf((info) => {
+  const { level, message, label, timestamp } = info;
+  const rawLevel = info[Symbol.for("level")] || level;
+
   // Keep webhook logging optional and never let a rejected webhook request crash the bot.
-  if (webhookClient && (level === "error" || level === "warn")) {
+  if (webhookClient && (rawLevel === "error" || rawLevel === "warn")) {
     webhookClient
-      .send({ content: `${timestamp} [${level}] [${label || "General"}] ${message}`.slice(0, 2000) })
+      .send({ content: `${timestamp} [${rawLevel}] [${label || "General"}] ${message}`.slice(0, 2000) })
       .catch(() => {});
   }
 
