@@ -1,0 +1,53 @@
+name: Pogy Temporary Bot Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install canvas system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config libcairo2-dev libpango1.0-dev \
+            libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev
+
+      - name: Check required secrets
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+          MONGO: ${{ secrets.MONGO }}
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+        run: |
+          test -n "$TOKEN" || { echo "::error::Missing TOKEN repository secret."; exit 1; }
+          test -n "$MONGO" || { echo "::error::Missing MONGO repository secret."; exit 1; }
+          test -n "$CONFIG_JSON" || { echo "::error::Missing CONFIG_JSON repository secret. Add the contents of your original config.json as this secret."; exit 1; }
+
+      - name: Restore private bot configuration
+        env:
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+        run: |
+          node -e 'const fs=require("fs"); const c=JSON.parse(process.env.CONFIG_JSON); if (!c || typeof c !== "object" || Array.isArray(c)) throw new Error("CONFIG_JSON must contain a JSON object"); fs.writeFileSync("config.json", JSON.stringify(c, null, 2), {mode: 0o600}); console.log("Configuration JSON parsed successfully.");'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate configuration and run startup smoke test
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+          MONGO: ${{ secrets.MONGO }}
+        run: node scripts/smoke-test.js
