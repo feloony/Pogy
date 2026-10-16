@@ -26,7 +26,9 @@ module.exports = class Util {
   }
 
   get directory() {
-    return `${path.dirname(require.main.filename)}${path.sep}`;
+    // Resolve paths from this project file, not require.main, so scripts
+    // launched from subdirectories still find the root src/ folders.
+    return `${path.resolve(__dirname, "../..")}${path.sep}`;
   }
 
   removeDuplicates(arr) {
@@ -88,7 +90,6 @@ module.exports = class Util {
       if (!(event instanceof Event))
         throw new TypeError(`Event ${name} doesn't belong in Events`);
       this.client.botEvents.set(event.name, event);
-      //logger.info(`✅ loaded: ${event.name}`, { label: 'Events' })
       event.emitter[event.type](name, (...args) => event.run(...args));
     }
   }
