@@ -19,14 +19,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Pogy currently pins canvas@2.9.3, whose native bindings are
+      # incompatible with Node 20's V8 API. Use Node 18 for this legacy
+      # dependency check until canvas is upgraded and the lockfile refreshed.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 18
           cache: npm
 
-      # canvas@2.x may need to compile from source on newer Node versions.
-      # Install its native Linux build dependencies before npm ci.
       - name: Install canvas system dependencies
         run: |
           sudo apt-get update
